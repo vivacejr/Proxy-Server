@@ -10,7 +10,7 @@ import json
 import threading
 import email.utils as eut
 import signal
-
+import struct 
 dict = {
     'mxConnections': 10,
     'proxy_port': 20100,
@@ -18,11 +18,29 @@ dict = {
     'CONNECTION_TIMEOUT': 20
 }
 
+file = open('blacklist.txt',"r")
+blockList = file.readlines()
+blockList_ary = []
+    
+for cur in blockList:
+    print cur
+    (ip, cidr) = cur.split('/')
+    cidr = int(cidr) 
+    host_bits = 32 - cidr
+    i = struct.unpack('>I', socket.inet_aton(ip))[0] # note the endianness
+    start = (i >> host_bits) << host_bits # clear the host bits
+    end = start | ((1 << host_bits) )
+    end += 1
+    # excludes the first and last address in the subnet
+    for i in range(start, end):
+        blockList_ary.append(socket.inet_ntoa(struct.pack('>I',i)))
+
+
 def HandleRequest(clientSocket, clientAddress):
     request = clientSocket.recv(dict['bufSize'])
     firstLine = request.split('\n')[0]
     url = firstLine.split(' ')[1]
-
+    print(url);
     http_pos = url.find("://") # find pos of ://
     if (http_pos==-1):
         temp = url
@@ -47,7 +65,12 @@ def HandleRequest(clientSocket, clientAddress):
     else: # specific port 
         port = int((temp[(port_pos+1):])[:webserver_pos-port_pos-1])
         webserver = temp[:port_pos] 
-
+    
+    ip = socket.gethostbyname(webserver)
+    print(ip)
+    if(ip in blockList_ary):
+        clientSocket.send('page blocked')
+        exit(0)
     print(webserver,    port)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
     print(s)
@@ -85,11 +108,13 @@ class serverStart:
         self.proxySocket.bind(('127.0.0.1', dict['proxy_port']))
         self.proxySocket.listen(dict['mxConnections']) # become a server socket
 
+
         while True:
 
             # Establish the connection
             (clientSocket, clientAddress) = self.proxySocket.accept() 
             # clientData = clientSocket.recv(bufSize);
+
 
             curThread = threading.Thread(name=self._getClientName(), \
             target = HandleRequest , args=(clientSocket, clientAddress))
