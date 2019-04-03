@@ -11,6 +11,7 @@ import threading
 import email.utils as eut
 import signal
 import struct 
+from urlparse import urlparse
 dict = {
 	'mxConnections': 10,
 	'proxy_port': 20100,
@@ -48,14 +49,22 @@ def getCacheList():
 
 def HandleRequest(clientSocket, clientAddress):
 
-	allow = 0 
 	request = clientSocket.recv(dict['bufSize'])
-	print(request)
+	strg = urlparse(request.split('\n')[0].split(' ')[1])[2]
+	strg2 = request.split('\n')
+	strg3 = strg2[0].split(' ')
+	strg3[1] = strg
 	thirdLine = request.split('\n')[2]
 	firstWord = thirdLine.split()[0]
 	thirdWord = ""
 	decod = ""
+	allow = 0 
 	curlFlag = 0
+	strg4 = ' '
+	strg4 = strg4.join(strg3)
+	strg2[0] = strg4
+	final = '\n'
+	final = final.join(strg2)
 
 	if firstWord == "Authorization:" :
 		curlFlag = 1
@@ -94,30 +103,28 @@ def HandleRequest(clientSocket, clientAddress):
 		port = int((temp[(port_pos+1):])[:webserver_pos-port_pos-1])
 		webserver = temp[:port_pos] 
 	
-	# if webserver in cache
-	# if not webserver in urlList:
-		# urlList[webserver] = []
-	# urlList[webserver]
 
 	ip = socket.gethostbyname(webserver)
-	
 
 	if ip in blockList_ary:
-		print curlFlag
-		print allow
 		if curlFlag == 1:
 			if allow == 0 :
 				clientSocket.send('Authentication failed')
+				clientSocket.close()
 				exit(0)
 		else :
-			clientSocket.send('page blocked')
+			clientSocket.send('This page is blocked')
+			clientSocket.close()
 			exit(0)
 		
+
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
 	s.settimeout(dict['CONNECTION_TIMEOUT'])
-	s.connect((webserver, port))
-	s.sendall(request)
-
+	try :	
+		s.connect((webserver, port))
+		s.sendall(final)
+	except :
+		sys.exit()
 	# if filename in os.listdir('./.cache/'):
 	# 	st = "GET /"
 	# 	st = st + filename
